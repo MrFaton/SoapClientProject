@@ -1,0 +1,11 @@
+/RemoteSystemsTempFiles/*
+/.metadata/*
+/.recommenders/*
+.settings/
+.svn/
+.classpath
+.project
+/.git/*
+/target/
+/DBTraineeship.log
+.springBeans
