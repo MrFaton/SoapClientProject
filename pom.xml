@@ -17,18 +17,13 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>com.google.guava</groupId>
-			<artifactId>guava</artifactId>
-			<version>19.0</version>
-		</dependency>
-
-		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
 			<version>4.12</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+
 
 	<build>
 		<finalName>WebServiceProject</finalName>
@@ -41,6 +36,34 @@
 					<target>${compiler.version}</target>
 				</configuration>
 			</plugin>
+
+			<plugin>
+				<groupId>org.apache.cxf</groupId>
+				<artifactId>cxf-codegen-plugin</artifactId>
+				<version>3.0.5</version>
+				<executions>
+					<execution>
+						<id>generate-sources</id>
+						<phase>generate-sources</phase>
+						<configuration>
+							<sourceRoot>target/generate_sources</sourceRoot>
+							<fork>always</fork>
+							<additionalJvmArgs>
+								-Djavax.xml.accessExternalSchema=all
+							</additionalJvmArgs>
+							<wsdlOptions>
+								<wsdlOption>
+									<wsdl>http://10.10.34.83:8080/WebServiceProject/soap_user_service?wsdl</wsdl>
+								</wsdlOption>
+							</wsdlOptions>
+						</configuration>
+						<goals>
+							<goal>wsdl2java</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
 		</plugins>
 	</build>
 </project>

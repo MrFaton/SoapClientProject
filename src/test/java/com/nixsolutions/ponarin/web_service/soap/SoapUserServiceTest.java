@@ -1,10 +1,11 @@
 package com.nixsolutions.ponarin.web_service.soap;
 
-import java.net.URL;
-import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
 
-import javax.xml.namespace.QName;
-import javax.xml.ws.Service;
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.junit.After;
 import org.junit.Before;
@@ -12,13 +13,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-import com.nixsolutions.ponarin.entity.Role;
-import com.nixsolutions.ponarin.entity.User;
+import javax.xml.ws.soap.SOAPFaultException;
+
+import com.nixsolutions.ponarin.web_service.soap.impl.SoapUserServiceImplService;
 
 public class SoapUserServiceTest {
-    private static final String WSDL_URL = "http://10.10.34.83:8080/WebServiceProject/soap_user_service?wsdl";
-    private static final String NAMESPACE_URI = "http://impl.soap.web_service.ponarin.nixsolutions.com/";
-    private static final String LOCAL_PART = "SoapUserServiceImplService";
+    private static final long NON_EXISTS_ID = -1L;
+    private static final String NON_EXISTS_LOGIN = "nonExistsLogin";
+    private static final String NON_EXISTS_EMAIL = "non_exists_email@email.ua";
 
     private static SoapUserService soapUserService;
 
@@ -26,10 +28,8 @@ public class SoapUserServiceTest {
 
     @BeforeClass
     public static void generalSetUp() throws Exception {
-        URL url = new URL(WSDL_URL);
-        QName qName = new QName(NAMESPACE_URI, LOCAL_PART);
-        Service service = Service.create(url, qName);
-        soapUserService = service.getPort(SoapUserService.class);
+        soapUserService = new SoapUserServiceImplService()
+                .getSoapUserServiceImplPort();
     }
 
     @Before
@@ -47,7 +47,10 @@ public class SoapUserServiceTest {
 
     @After
     public void tearDown() {
-        soapUserService.remove(testUser);
+        User user = soapUserService.findById(testUser.getId());
+        if (user != null) {
+            soapUserService.remove(testUser);
+        }
     }
 
     @Test
@@ -61,45 +64,115 @@ public class SoapUserServiceTest {
 
         assertNotNull("User must exists in db", actualUser);
         testUser.setId(actualUser.getId());
-        assertEquals("Users must equals", testUser, actualUser);
+        equalsUsers(testUser, actualUser);
     }
 
-    @Test
+    @Test(expected = SOAPFaultException.class)
     public void testCreateLoginDublicate() {
-        testUser.setEmail("new_email@mail.ru");
-        try {
-            soapUserService.create(testUser);
-            fail("Must be thrown exception couse login is dublicate");
-        } catch (Exception ex) {
-        }
+        testUser.setEmail(NON_EXISTS_EMAIL);
+        soapUserService.create(testUser);
     }
 
-    @Test
+    @Test(expected = SOAPFaultException.class)
     public void testCreateWithEmailDublicate() {
-        testUser.setLogin("newTestLogin");
-        try {
-            soapUserService.create(testUser);
-            fail("Must be thrown exception couse email is dublicate");
-        } catch (Exception ex) {
-        }
+        testUser.setLogin(NON_EXISTS_LOGIN);
+        soapUserService.create(testUser);
     }
-    
+
     @Test
     public void testUpdate() {
         testUser.setPassword(testUser.getPassword() + "12erph6");
-        testUser.setEmail("new_test_email@mail.ru");
+        testUser.setEmail(NON_EXISTS_EMAIL);
         testUser.setFirstName("updated first name");
         testUser.setLastName("updated last name");
-        testUser.setBirthDay(new Date());
+        testUser.setBirthDay(getXmlCalendar(10, 5, 2000));
 
         Role role = new Role();
         role.setId(2);
         role.setName("User");
         testUser.setRole(role);
-        
+
         soapUserService.update(testUser);
-        
-        User extractedUser = soapUserService.findByLogin(testUser.getLogin());
+
+        User actualUser = soapUserService.findById(testUser.getId());
+
+        equalsUsers(testUser, actualUser);
+    }
+
+    @Test(expected = SOAPFaultException.class)
+    public void testUpdateNonExistsId() {
+        User user = getDefaultUser();
+        user.setId(NON_EXISTS_ID);
+        soapUserService.update(user);
+    }
+
+    @Test(expected = SOAPFaultException.class)
+    public void testUpdateEmailDublicate() {
+        List<User> users = soapUserService.findAll();
+        testUser.setLogin("newTestLogin");
+        testUser.setEmail(users.get(0).getEmail());
+        soapUserService.update(testUser);
+    }
+
+    @Test
+    public void testRemove() {
+        soapUserService.remove(testUser);
+        User dbUser = soapUserService.findById(testUser.getId());
+        assertNull("Deleted user still in db", dbUser);
+    }
+
+    @Test
+    public void testRemoveWithNonExistsUser() {
+        User user = getDefaultUser();
+        user.setId(NON_EXISTS_ID);
+        user.setLogin(NON_EXISTS_LOGIN);
+        user.setEmail(NON_EXISTS_EMAIL);
+
+        try {
+            soapUserService.remove(user);
+            fail("Exception during removing non exists user");
+        } catch (Exception ex) {
+        }
+    }
+
+    @Test
+    public void testFindAll() {
+        List<User> userList = soapUserService.findAll();
+
+        assertTrue("User list size must be grater or equals 2",
+                userList.size() >= 2);
+    }
+
+    @Test
+    public void testFindById() {
+        User actualUser = soapUserService.findById(testUser.getId());
+        equalsUsers(testUser, actualUser);
+    }
+
+    @Test
+    public void testFindByIdWithNonExistsId() {
+        User user = soapUserService.findById(-1L);
+        assertNull("User must be null", user);
+    }
+
+    @Test
+    public void testFindByLogin() {
+        User user = soapUserService.findByLogin(testUser.getLogin());
+        assertNotNull("User must exists in db", user);
+        equalsUsers(testUser, user);
+    }
+
+    @Test
+    public void testFindByLoginWithNonExistsLogin() {
+        User user = soapUserService.findByLogin("nonExistsLogin");
+        assertNull("User must be null", user);
+    }
+
+    @Test
+    public void testFindByEmail() {
+        User user = soapUserService.findByEmail(testUser.getEmail());
+        assertNotNull("User must exists in db", user);
+        equalsUsers(testUser, user);
     }
 
     private User getDefaultUser() {
@@ -110,7 +183,7 @@ public class SoapUserServiceTest {
         user.setEmail("testEmail@mail.ru");
         user.setFirstName("First Name");
         user.setLastName("Last Name");
-        user.setBirthDay(new Date());
+        user.setBirthDay(getXmlCalendar(7, 10, 1990));
 
         Role role = new Role();
         role.setId(1);
@@ -118,5 +191,35 @@ public class SoapUserServiceTest {
         user.setRole(role);
 
         return user;
+    }
+
+    private XMLGregorianCalendar getXmlCalendar(int day, int month, int year) {
+        GregorianCalendar calendar = new GregorianCalendar(year, month, day);
+        try {
+            return DatatypeFactory.newInstance()
+                    .newXMLGregorianCalendar(calendar);
+        } catch (DatatypeConfigurationException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    private void equalsUsers(User expected, User actual) {
+        assertEquals("Id not equals", expected.getId(), actual.getId());
+        assertEquals("Login not equals", expected.getLogin(),
+                actual.getLogin());
+        assertEquals("Password not equals", expected.getPassword(),
+                actual.getPassword());
+        assertEquals("Email not equals", expected.getEmail(),
+                actual.getEmail());
+        assertEquals("First name not equals", expected.getFirstName(),
+                actual.getFirstName());
+        assertEquals("Last name not equals", expected.getLastName(),
+                actual.getLastName());
+        assertEquals("Birthday not equals", expected.getBirthDay(),
+                actual.getBirthDay());
+        assertEquals("Role id not equals", expected.getRole().getId(),
+                actual.getRole().getId());
+        assertEquals("Role name not equals", expected.getRole().getName(),
+                actual.getRole().getName());
     }
 }
